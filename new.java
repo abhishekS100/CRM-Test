@@ -1,36 +1,49 @@
+@Service
+@RequiredArgsConstructor
+public class UserService implements IUserService {
+    private final UserRepository userRepository;
+    private final ModelMapper modelMapper;
 
+    @Override
+    public User getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found!"));
+    }
 
-package com.crm.customerservice.entity;
+    @Override
+    public User createUser(CreateUserRequest request) {
+        return  Optional.of(request)
+                .filter(user -> !userRepository.existsByEmail(request.getEmail()))
+                .map(req -> {
+                    User user = new User();
+                    user.setEmail(request.getEmail());
+                    user.setPassword(request.getPassword());
+                    user.setFirstName(request.getFirstName());
+                    user.setLastName(request.getLastName());
+                    return  userRepository.save(user);
+                }) .orElseThrow(() -> new AlreadyExistsException("Oops!" +request.getEmail() +" already exists!"));
+    }
 
-import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
-import lombok.*;
+    @Override
+    public User updateUser(UserUpdateRequest request, Long userId) {
+        return  userRepository.findById(userId).map(existingUser ->{
+            existingUser.setFirstName(request.getFirstName());
+            existingUser.setLastName(request.getLastName());
+            return userRepository.save(existingUser);
+        }).orElseThrow(() -> new ResourceNotFoundException("User not found!"));
 
-import java.util.List;
+    }
 
-@Entity
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Customer {
+    @Override
+    public void deleteUser(Long userId) {
+        userRepository.findById(userId).ifPresentOrElse(userRepository :: delete, () ->{
+            throw new ResourceNotFoundException("User not found!");
+        });
+    }
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @NotBlank(message = "Name is mandatory")
-    @Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters")
-    private String name;
-
-    @NotBlank(message = "Email is mandatory")
-    @Email(message = "Invalid email format")
-    private String email;
-
-    @NotBlank(message = "Phone number is mandatory")
-    @Pattern(regexp = "^[0-9]{10}$", message = "Phone number must be 10 digits")
-    private String phone;
-
-    @ElementCollection
-    private List<@NotBlank(message = "Interaction cannot be blank") String> interactions;
+    @Override
+    public UserDto convertUserToDto(User user) {
+        return modelMapper.map(user, UserDto.class);
+    }
+    
 }
