@@ -1,49 +1,81 @@
-@Service
+public class ProductNotFoundException extends RuntimeException {
+    public ProductNotFoundException(String message) {
+        super(message);
+    }
+}
+
+public class AlreadyExistsException extends RuntimeException {
+    public AlreadyExistsException(String message) {
+        super(message);
+    }
+}
+
+
+public class ResourceNotFoundException extends RuntimeException {
+    public ResourceNotFoundException(String message) {
+        super(message);
+
+    }
+}
+
 @RequiredArgsConstructor
-public class UserService implements IUserService {
-    private final UserRepository userRepository;
-    private final ModelMapper modelMapper;
+@RestController
+@RequestMapping("${api.prefix}/users")
+public class UserController {
+    private final IUserService userService;
 
-    @Override
-    public User getUserById(Long userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found!"));
+    @GetMapping("/{userId}/user")
+    public ResponseEntity<ApiResponse> getUserById(@PathVariable Long userId) {
+        try {
+            User user = userService.getUserById(userId);
+            UserDto userDto = userService.convertUserToDto(user);
+            return ResponseEntity.ok(new ApiResponse("Success", userDto));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(), null));
+        }
     }
 
-    @Override
-    public User createUser(CreateUserRequest request) {
-        return  Optional.of(request)
-                .filter(user -> !userRepository.existsByEmail(request.getEmail()))
-                .map(req -> {
-                    User user = new User();
-                    user.setEmail(request.getEmail());
-                    user.setPassword(request.getPassword());
-                    user.setFirstName(request.getFirstName());
-                    user.setLastName(request.getLastName());
-                    return  userRepository.save(user);
-                }) .orElseThrow(() -> new AlreadyExistsException("Oops!" +request.getEmail() +" already exists!"));
+    @PostMapping("/add")
+    public ResponseEntity<ApiResponse> createUser(@RequestBody CreateUserRequest request) {
+        try {
+            User user = userService.createUser(request);
+            UserDto userDto = userService.convertUserToDto(user);
+            return ResponseEntity.ok(new ApiResponse("Create User Success!", userDto));
+        } catch (AlreadyExistsException e) {
+            return ResponseEntity.status(CONFLICT).body(new ApiResponse(e.getMessage(), null));
+        }
     }
-
-    @Override
-    public User updateUser(UserUpdateRequest request, Long userId) {
-        return  userRepository.findById(userId).map(existingUser ->{
-            existingUser.setFirstName(request.getFirstName());
-            existingUser.setLastName(request.getLastName());
-            return userRepository.save(existingUser);
-        }).orElseThrow(() -> new ResourceNotFoundException("User not found!"));
-
+    @PutMapping("/{userId}/update")
+    public ResponseEntity<ApiResponse> updateUser(@RequestBody UserUpdateRequest request, @PathVariable Long userId) {
+        try {
+            User user = userService.updateUser(request, userId);
+            UserDto userDto = userService.convertUserToDto(user);
+            return ResponseEntity.ok(new ApiResponse("Update User Success!", userDto));
+        } catch (ResourceNotFoundException e) {
+           return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(), null));
+        }
     }
-
-    @Override
-    public void deleteUser(Long userId) {
-        userRepository.findById(userId).ifPresentOrElse(userRepository :: delete, () ->{
-            throw new ResourceNotFoundException("User not found!");
-        });
+    @DeleteMapping("/{userId}/delete")
+    public ResponseEntity<ApiResponse> deleteUser(@PathVariable Long userId) {
+        try {
+            userService.deleteUser(userId);
+            return ResponseEntity.ok(new ApiResponse("Delete User Success!", null));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(), null));
+        }
     }
+}
 
-    @Override
-    public UserDto convertUserToDto(User user) {
-        return modelMapper.map(user, UserDto.class);
+
+
+
+
+
+@Configuration
+public class ShopConfig {
+
+    @Bean
+    public ModelMapper modelMapper() {
+        return new ModelMapper();
     }
-    
 }
