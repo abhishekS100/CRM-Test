@@ -1,53 +1,124 @@
+server:
+  port: 8761
 
+eureka:
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+
+
+
+✅ Step 2: Register Auth Service to Eureka
+In auth-service/application.yml:
+yaml
+Copy
+Edit
+spring:
+  application:
+    name: auth-service
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+
+
+Now, when you run auth-service, it will appear on the Eureka dashboard (http://localhost:8761).
+
+
+
+
+
+
+
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lowerCaseServiceId: true
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+
+        - id: customer-service
+          uri: lb://customer-service
+          predicates:
+            - Path=/customers/**
+
+        - id: marketing-service
+          uri: lb://marketing-service
+          predicates:
+            - Path=/marketing/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+
+
+✅ Step 4: Secure Gateway with JWT Token Validation
+Update application.yml in gateway-service:
+
+yaml
+Copy
+Edit
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          secret: secret-key
+✅ Step 5: Add Security Config in Gateway
+SecurityConfig.java
+java
+Copy
+Edit
 @Configuration
-@EnableMethodSecurity
+@EnableWebFluxSecurity
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt());
-        return http.build();
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+        return http
+            .csrf(ServerHttpSecurity.CsrfSpec::disable)
+            .authorizeExchange(ex -> ex
+                .pathMatchers("/auth/**").permitAll()
+                .anyExchange().authenticated()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+            .build();
     }
 }
+✅ Test Flow
+Run Services in order:
 
+eureka-server
 
+gateway-service
 
-@RestController
-@RequestMapping("/customers")
-@RequiredArgsConstructor
-public class CustomerController {
+auth-service
 
-    private final CustomerService customerService;
+(customer-service, marketing-service, etc.)
 
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public Customer create(@RequestBody Customer customer) {
-        return customerService.saveCustomer(customer);
-    }
+Access endpoints via:
 
-    @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'SALES', 'SUPPORT')")
-    public List<Customer> getAll() {
-        return customerService.getAllCustomers();
-    }
+http://localhost:8080/auth/login
 
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SALES', 'SUPPORT')")
-    public Customer getOne(@PathVariable Long id) {
-        return customerService.getCustomerById(id);
-    }
+http://localhost:8080/customers/
 
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SALES')")
-    public Customer update(@PathVariable Long id, @RequestBody Customer customer) {
-        return customerService.updateCustomer(id, customer);
-    }
+http://localhost:8080/marketing/
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public void delete(@PathVariable Long id) {
-        customerService.deleteCustomer(id);
-    }
-}
+Use Postman to send Bearer <JWT> token in header for customer/marketing routes.
+                                                                        
